@@ -32,13 +32,21 @@ def handle_disconnect():
         user = connected_users[client_id]  #Key value pair - Key is CID and value is the username we are providing when we are entering
         print(f"Client with id {client_id} and username {user['username']} disconnected")
         # Informing others in the room
-        if user.get('room'):
-            leave_room(user['room'])
+        temp = user.get('room')
+        if temp:
+            leave_room(temp)
+            if temp in active_rooms and user['username'] in active_rooms[temp]['users']:
+                active_rooms[temp]['users'].remove(user['username'])
+            
             emit('user_left', {
                 'username': user['username'],
                 'message': f"{user['username']} left the room"
-            }, room=user['room'])
-        
+            }, room=temp, include_self=False)
+
+            emit('room_joined', {
+                'room_id': temp,
+                'users': active_rooms[temp]['users'] if temp in active_rooms else []  # If everyone leave then reqruired this condition other wise showing error
+            }, room=temp)
         del connected_users[client_id]
 
 
@@ -79,13 +87,22 @@ def handle_join_room(data):
         return
     
     user = connected_users[client_id]
-    if user.get('room'):
-        leave_room(user['room'])
+    temp = user.get('room')  # What we did in disconnect
+    if temp:
+        leave_room(temp)
+        if temp in active_rooms and user['username'] in active_rooms[temp]['users']:
+            active_rooms[temp]['users'].remove(user['username'])
+        
         emit('user_left', {
             'username': user['username'],
             'message': f"{user['username']} left the room"
-        }, room=user['room'], include_self=False)
-    
+        }, room=temp, include_self=False)
+
+        emit('room_joined', {
+            'room_id': temp,
+            'users': active_rooms[temp]['users'] if temp in active_rooms else []  # If everyone leave then reqruired this condition other wise showing error
+        }, room=temp)
+
     join_room(room_id)
     user['room'] = room_id
     

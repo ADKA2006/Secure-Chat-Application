@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='socket.io.js') }}"></script>
+</head>
+
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen">
+        <marquee class="projectTitle">ICN Project - Secure Chat Application</marquee>
+        <div class="login-container">
+            <h1>Secure Chat</h1>
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter your username" maxlength="20">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter your password" maxlength="20">
+            </div>
+            <button id="joinBtn" class="btn primary">Join Chat</button>
+            <div id="loginStatus" class="status"></div>
+        </div>
+    </div>
+
+    <!-- Main Chat Screen -->
+    <div id="mainScreen" class="screen hidden">
+        <div class="chat-container">
+            <div class="header">
+                <h2>Secure Chat</h2>
+                <div class="user-info">
+                    <span id="currentUser"></span>
+                    <button id="disconnectBtn" class="btn primary">Disconnect</button>
+                </div>
+            </div>
+
+            <div class="room-section">
+                <div class="form-group inline">
+                    <input type="text" id="roomInput" placeholder="Enter room name" maxlength="20">
+                    <button id="joinRoomBtn" class="btn primary">Join Room</button>
+                </div>
+                <div id="roomStatus" class="status"></div>
+                <div id="roomUsers" class="room-users hidden">
+                    <strong>Users in room:</strong> <span id="usersList"></span>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div id="messages" class="messages"></div>
+                <div class="message-input">
+                    <label for="fileInput" class="btn secondary file-btn">📎 File</label>
+                    <input type="file" id="fileInput" style="display: none;" disabled>
+                    <label for="videoinput" class="btn secondary file-btn">📹 Video</label>
+                    <input type="file" id="videoinput" style="display: none;" disabled>
+                    <input type="text" id="messageInput" placeholder="Join a room to start chatting" disabled>
+                    <button id="sendBtn" class="btn primary" disabled>Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- https://www.w3schools.com/howto/howto_css_modals.asp-->
+        <!-- File Transfer thing-->
+        <div id="fileModal" class="modal hidden">
+            <div class="modal-content">
+                <h3>File Transfer</h3>
+                <div id="fileProgress">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <div id="progressText">0%</div>
+                </div>
+                <div id="fileStatus"></div>
+                <button id="closeModalBtn" class="btn secondary">Close</button>
+            </div>
+        </div>
+
+        <!-- https://www.geeksforgeeks.org/javascript/how-to-make-a-toast-notification-in-html-css-and-javascript/ -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
