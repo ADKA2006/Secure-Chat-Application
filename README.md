@@ -19,9 +19,26 @@ A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS
 
 ## Quick Start
 
+### Option 1: Automated Setup (Recommended)
 ```bash
 chmod +x setup.sh
 ./setup.sh
+```
+
+### Option 2: Manual Setup
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Running the Application
+```bash
+# Option 1: Using run script (Recommended)
+chmod +x run_app.sh
+./run_app.sh
+
+# Option 2: Manual run
 source venv/bin/activate
 python server.py
 ```
@@ -103,7 +120,17 @@ secure-chat-app/
 
 ## Screenshots
 
+### Login Screen
+![Login Screen](Images/img-1.png)
 
+### Room Management
+![Room Management](Images/img-2.png)
+
+### Chat Interface
+![Chat Interface](Images/img-3.png)
+
+### File Transfer
+![File Transfer](Images/img-4.png)
 ---
 
 ## Browser Compatibility
