@@ -13,6 +13,7 @@ socketio = SocketIO(app, logger=True, cors_allowed_origins="*")
 connected_users = {}
 active_rooms = {}
 file_transfers = {}
+users_typing = {}
 
 
 @app.route('/')   #Get only
@@ -100,8 +101,8 @@ def handle_join_room(data):
 
         emit('room_joined', {
             'room_id': temp,
-            'users': active_rooms[temp]['users'] if temp in active_rooms else []  # If everyone leave then reqruired this condition other wise showing error
-        }, room=temp)
+            'users': active_rooms[temp]['users'] if temp in active_rooms else []  # If everyone leave then reqruired the empty list
+        }, room=temp)  # For the old room updation
 
     join_room(room_id)
     user['room'] = room_id
@@ -119,7 +120,7 @@ def handle_join_room(data):
     emit('room_joined', {
         'room_id': room_id,
         'users': active_rooms[room_id]['users']
-    }, room=room_id)
+    }, room=room_id)  # For the new room updation
 
     emit('user_joined', {           
         'username': user['username'],
@@ -150,6 +151,22 @@ def handle_message(data):
     
     print(f"{user['username']} in {user['room']} send: {message}")
     emit('new_message', message_data, room=user['room'])
+
+'''
+@socketio.on('typing')
+def handle_typing(data):
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    if not user.get('room'):
+        emit('error', {'message': 'You are not in any room'})
+        return
+
+    emit('users_typing', {'users': user['username']}, room=user['room'])
+'''
 
 @socketio.on('start_file_transfer')
 def handle_file_transfer_start(data):

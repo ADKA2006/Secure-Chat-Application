@@ -25,6 +25,7 @@ class SecureChatClient {
         this.roomStatus = document.getElementById('roomStatus');
         this.roomUsers = document.getElementById('roomUsers');
         this.usersList = document.getElementById('usersList');
+        this.typingUsersList = document.getElementById('typingUsersList');
         this.messages = document.getElementById('messages');
         this.messageInput = document.getElementById('messageInput');
         this.sendBtn = document.getElementById('sendBtn');
@@ -294,7 +295,7 @@ class SecureChatClient {
     }
 
     connectSocket() {
-        console.log('Attempting to connect to Socket.IO server...');
+        console.log('Attempting to connect to Socket.IO server');
         this.socket = io();
         
         this.socket.on('connect', () => {
@@ -343,6 +344,13 @@ class SecureChatClient {
             this.addSystemMessage(data.message);
             this.usersList.textContent = data.users.join(', ');
         });
+        
+        /*
+        this.socket.on('users_typing', (data) => {
+            this.typingUsersList.textContent = data.users.join(', ');
+            this.usersTyping.classList.remove('hidden');
+        });
+        */
 
         // Message events
         this.socket.on('new_message', (data) => {
@@ -359,7 +367,7 @@ class SecureChatClient {
         });
 
         this.socket.on('file_incoming', (data) => {
-            this.showToast(`📁 ${data.sender} is sending: ${data.filename}`, 'info');
+            this.showToast(`${data.sender} is sending: ${data.filename}`, 'info');
         });
 
         this.socket.on('file_ready', (data) => {
