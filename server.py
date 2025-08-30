@@ -10,10 +10,10 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sem3icnproject'
 
 socketio = SocketIO(app, logger=True, cors_allowed_origins="*")
-connected_users = {}
-active_rooms = {}
-file_transfers = {}
-users_typing = {}
+connected_users = {} # {client_id: {username: ..., room: ..., joined_at: ...}}
+active_rooms = {} # {room_id: {users: [...], created_at: ...}}
+file_transfers = {} # {transfer_id: {file_name: ..., file_size: ..., total_chunks: ...,chunks:{...} sender: ..., room/receiver:.... , time: ...}}
+users_typing = {} # {room_id: set([usernames])}
 
 
 @app.route('/')   #Get only
@@ -32,12 +32,20 @@ def handle_disconnect():
     if client_id in connected_users:
         user = connected_users[client_id]  #Key value pair - Key is CID and value is the username we are providing when we are entering
         print(f"Client with id {client_id} and username {user['username']} disconnected")
-        # Informing others in the room
+        # Informing others in the room (or cleaning up)
         temp = user.get('room')
         if temp:
             leave_room(temp)
             if temp in active_rooms and user['username'] in active_rooms[temp]['users']:
                 active_rooms[temp]['users'].remove(user['username'])
+            
+            # Clean up typing users
+            if temp in users_typing and user['username'] in users_typing[temp]:
+                users_typing[temp].discard(user['username'])
+                if not users_typing[temp]:
+                    del users_typing[temp]
+                # Emit updated typing status
+                emit('users_typing', {'users': list(users_typing.get(temp, []))}, room=temp)
             
             emit('user_left', {
                 'username': user['username'],
@@ -93,6 +101,12 @@ def handle_join_room(data):
         leave_room(temp)
         if temp in active_rooms and user['username'] in active_rooms[temp]['users']:
             active_rooms[temp]['users'].remove(user['username'])
+
+        if temp in users_typing and user['username'] in users_typing[temp]:
+            users_typing[temp].discard(user['username'])
+            if not users_typing[temp]:
+                del users_typing[temp]
+            emit('users_typing', {'users': list(users_typing.get(temp, []))}, room=temp)
         
         emit('user_left', {
             'username': user['username'],
@@ -152,9 +166,9 @@ def handle_message(data):
     print(f"{user['username']} in {user['room']} send: {message}")
     emit('new_message', message_data, room=user['room'])
 
-'''
-@socketio.on('typing')
-def handle_typing(data):
+# User typing thing
+@socketio.on('user_start_typing')
+def handle_start_typing():
     client_id = request.sid
     if client_id not in connected_users:
         emit('error', {'message': 'The given client id is not part of the connected users'})
@@ -165,8 +179,33 @@ def handle_typing(data):
         emit('error', {'message': 'You are not in any room'})
         return
 
-    emit('users_typing', {'users': user['username']}, room=user['room'])
-'''
+    room_id = user['room']
+    username = user['username']
+    if room_id not in users_typing:
+        users_typing[room_id] = set()
+    users_typing[room_id].add(username)
+    emit('users_typing', {'users': list(users_typing[room_id])}, room=room_id, include_self=False)
+
+@socketio.on('user_stop_typing')
+def handle_stop_typing():
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    if not user.get('room'):
+        emit('error', {'message': 'You are not in any room'})
+        return
+    
+    room_id = user['room']
+    username = user['username']
+    
+    if room_id in users_typing and username in users_typing[room_id]:
+        users_typing[room_id].discard(username)
+        if not users_typing[room_id]:
+            del users_typing[room_id]
+        emit('users_typing', {'users': list(users_typing.get(room_id, []))}, room=room_id, include_self=False)
 
 @socketio.on('start_file_transfer')
 def handle_file_transfer_start(data):
@@ -185,7 +224,7 @@ def handle_file_transfer_start(data):
     filename = data.get('filename')
     file_size = data.get('file_size')
     total_chunks = data.get('total_chunks')
-    transfer_id = str(uuid.uuid4())
+    transfer_id = str(uuid.uuid4()) # 128 bits
     file_transfers[transfer_id] = {
         'filename': filename,
         'file_size': file_size,

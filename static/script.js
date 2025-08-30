@@ -4,6 +4,8 @@ class SecureChatClient {
         this.username = null;
         this.currentRoom = null;
         this.currentTransferId = null;
+        this.typingTimeout = null;
+        this.isTyping = false;
         
         this.initialiseElements();
         this.attachEventListeners();
@@ -25,6 +27,7 @@ class SecureChatClient {
         this.roomStatus = document.getElementById('roomStatus');
         this.roomUsers = document.getElementById('roomUsers');
         this.usersList = document.getElementById('usersList');
+        this.usersTyping = document.getElementById('usersTyping');
         this.typingUsersList = document.getElementById('typingUsersList');
         this.messages = document.getElementById('messages');
         this.messageInput = document.getElementById('messageInput');
@@ -52,6 +55,7 @@ class SecureChatClient {
         this.roomInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.joinRoom();
         });
+        this.messageInput.addEventListener('input', () => this.userTyping());
         this.sendBtn.addEventListener('click', () => this.sendMessage());
         this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
@@ -70,7 +74,7 @@ class SecureChatClient {
             this.showStatus(this.loginStatus, 'Please enter a username', 'error');
             return;
         }
-        this.showStatus(this.loginStatus, 'Joining chat server', 'info');
+        this.showStatus(this.loginStatus, 'Username is taken', 'error');
         this.socket.emit('join_chat', {username});
     }
 
@@ -85,9 +89,35 @@ class SecureChatClient {
         this.roomInput.value = '';
     }
 
+    userTyping() {
+        if (!this.isTyping) {
+            this.socket.emit('user_start_typing');
+            this.isTyping = true;
+        }
+        if (this.typingTimeout) {
+            clearTimeout(this.typingTimeout);
+        }
+        // 3 Seconds of inactivity
+        this.typingTimeout = setTimeout(() => {
+            this.socket.emit('user_stop_typing');
+            this.isTyping = false;
+        }, 3000);
+    }
+
     sendMessage() {
         const message = this.messageInput.value.trim();
         if (!message) return;
+        
+        // Stop typing when sending message
+        if (this.isTyping) {
+            this.socket.emit('user_stop_typing');
+            this.isTyping = false;
+            if (this.typingTimeout) {
+                clearTimeout(this.typingTimeout);
+                this.typingTimeout = null;
+            }
+        }
+        
         this.socket.emit('send_message', { message });
         this.messageInput.value = '';
     }
@@ -325,6 +355,15 @@ class SecureChatClient {
             this.roomStatus.className = 'status success';
             this.usersList.textContent = data.users.join(', ');
             this.roomUsers.classList.remove('hidden');
+            this.usersTyping.classList.add('hidden');
+            this.typingUsersList.textContent = '';
+            if (this.isTyping) {
+                this.isTyping = false;
+                if (this.typingTimeout) {
+                    clearTimeout(this.typingTimeout);
+                    this.typingTimeout = null;
+                }
+            }
             
             // Enable chat
             this.messageInput.disabled = false;
@@ -345,13 +384,16 @@ class SecureChatClient {
             this.usersList.textContent = data.users.join(', ');
         });
         
-        /*
         this.socket.on('users_typing', (data) => {
-            this.typingUsersList.textContent = data.users.join(', ');
-            this.usersTyping.classList.remove('hidden');
+            const typingUsers = data.users || [];
+            this.typingUsersList.textContent = typingUsers.join(', ');
+            if (typingUsers.length > 0) {
+                this.usersTyping.classList.remove('hidden');
+            } else {
+                this.usersTyping.classList.add('hidden');
+            }
         });
-        */
-
+        
         // Message events
         this.socket.on('new_message', (data) => {
             this.addMessage(data.username, data.message, data.timestamp);

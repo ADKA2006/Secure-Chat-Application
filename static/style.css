@@ -329,6 +329,32 @@ input[type="password"]:disabled {
     font-size: 0.875rem;
 }
 
+/* Typing Indicator */
+.user-typing {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #e3f2fd;
+    border-radius: 5px;
+    font-size: 0.875rem;
+    color: #000000;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.user-typing strong {
+    color: #000000;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Modal */
 .modal {
     position: fixed;
