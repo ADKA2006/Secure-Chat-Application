@@ -58,3 +58,5 @@ coverage.xml
 # SSL certificates/keys 
 cert.pem
 key.pem
+
+setup_database.sql

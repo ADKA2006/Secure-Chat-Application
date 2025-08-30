@@ -14,14 +14,37 @@
         <marquee class="projectTitle">ICN Project - Secure Chat Application</marquee>
         <div class="login-container">
             <h1>Secure Chat</h1>
-            <div class="form-group">
-                <label for="username">Username:</label>
-                <input type="text" id="username" placeholder="Enter your username" maxlength="20">
-                <label for="password">Password:</label>
-                <input type="password" id="password" placeholder="Enter your password" maxlength="20">
+            <div class="tab-container">
+                <button class="tab-btn active" id="loginTab">Login</button>
+                <button class="tab-btn" id="registerTab">Register</button>
+
             </div>
-            <button id="joinBtn" class="btn primary">Join Chat</button>
-            <div id="loginStatus" class="status"></div>
+            
+            <!-- Login -->
+            <div id="loginForm" class="auth-form active">
+                <div class="form-group">
+                    <label for="loginUsername">Username:</label>
+                    <input type="text" id="loginUsername" placeholder="Enter your username" maxlength="50">
+                    <label for="loginPassword">Password:</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password" maxlength="50">
+                </div>
+                <button id="loginBtn" class="btn primary">Login</button>
+                <div id="loginStatus" class="status"></div>
+            </div>
+            
+            <!-- Registration -->
+            <div id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="registerUsername">Username:</label>
+                    <input type="text" id="registerUsername" placeholder="Choose a username" maxlength="50">
+                    <label for="registerPassword">Password:</label>
+                    <input type="password" id="registerPassword" placeholder="Choose a password" maxlength="50">
+                    <label for="confirmPassword">Confirm Password:</label>
+                    <input type="password" id="confirmPassword" placeholder="Confirm your password" maxlength="50">
+                </div>
+                <button id="registerBtn" class="btn primary">Register</button>
+                <div id="registerStatus" class="status"></div>
+            </div>
         </div>
     </div>
 

@@ -1,16 +1,126 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session
 from flask_socketio import SocketIO, join_room, leave_room, emit
+import mysql.connector
+from mysql.connector import Error
 import uuid
 import ssl
 import base64
+import bcrypt
 from datetime import datetime
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sem3icnproject'
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False
+
+# Database configuration - MariaDB
+DB_CONFIG = {
+    'user': 'admin',
+    'password': '12345',
+    'host': 'localhost',
+    'port': 3306,
+    'database': 'secure_chat_db'
+}
+
+def get_db_connection():
+    try:
+        return mysql.connector.connect(**DB_CONFIG)
+    except Error as e:
+        print(f"Error connecting to MySQL/MariaDB: {e}")
+        return None
 
 socketio = SocketIO(app, logger=True, cors_allowed_origins="*")
-connected_users = {} # {client_id: {username: ..., room: ..., joined_at: ...}}
+
+# Authentication functions are defined from here
+def hash_password(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')  # Hashing the pwd
+
+def verify_password(password, password_hash):
+    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+
+# Registration thing
+def create_user(username, password):
+    conn = get_db_connection()
+    if not conn:
+        return False, "Database connection failed"
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            return False, "Username already exists"
+        
+        password_hash = hash_password(password)
+        cursor.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash)
+        )
+        conn.commit()
+        return True, "User created successfully"
+        
+    except Error as e:
+        print(f"Database error: {e}")
+        return False, f"Database error: {e}"
+    finally:
+        cursor.close()
+        conn.close()
+
+# Login thing
+def authenticate_user(username, password):
+    conn = get_db_connection()
+    if not conn:
+        return False, None, "Database connection failed"
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return False, None, "Invalid username or password"
+        
+        user_id, db_username, password_hash = user
+        if verify_password(password, password_hash):
+            return True, {
+                'id': user_id,
+                'username': db_username
+            }, "Authentication successful"
+        else:
+            return False, None, "Invalid username or password"
+        
+    except Error as e:
+        print(f"Database error: {e}")
+        return False, None, f"Database error: {e}"
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_user_by_id(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return None
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, username FROM users WHERE id = ?",(user_id))
+        user = cursor.fetchone()
+        
+        if user:
+            return {
+                'id': user[0],'username': user[1]}
+        return None
+        
+    except Error as e:
+        print(f"Database error: {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+# Authentication is over here
+
+connected_users = {} # {client_id: {user_id: ..., username: ..., room: ..., joined_at: ...}}
 active_rooms = {} # {room_id: {users: [...], created_at: ...}}
 file_transfers = {} # {transfer_id: {file_name: ..., file_size: ..., total_chunks: ...,chunks:{...} sender: ..., room/receiver:.... , time: ...}}
 users_typing = {} # {room_id: set([usernames])}
@@ -60,27 +170,125 @@ def handle_disconnect():
 
 
 #Chat thing,room thing,.....
+@socketio.on('register_user')
+def handle_register(data):
+    """Handle user registration"""
+    client_id = request.sid
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+    
+    # Validation
+    if not username or not email or not password:
+        emit('register_error', {'message': 'All fields are required'})
+        return
+    
+    if len(username) < 3:
+        emit('register_error', {'message': 'Username must be at least 3 characters long'})
+        return
+    
+    if len(password) < 6:
+        emit('register_error', {'message': 'Password must be at least 6 characters long'})
+        return
+    
+    if '@' not in email or '.' not in email:
+        emit('register_error', {'message': 'Please enter a valid email address'})
+        return
+    
+    # Create user
+    success, message = create_user(username, email, password)
+    
+    if success:
+        emit('register_success', {
+            'message': message,
+            'username': username
+        })
+    else:
+        emit('register_error', {'message': message})
+
+@socketio.on('login_user')
+def handle_login(data):
+    """Handle user login"""
+    client_id = request.sid
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        emit('login_error', {'message': 'Username and password are required'})
+        return
+    
+    success, user_data, message = authenticate_user(username, password)
+    
+    if success:
+        # Store user session
+        session['user_id'] = user_data['id']
+        session['username'] = user_data['username']
+        
+        # Store in connected users
+        connected_users[client_id] = {
+            'user_id': user_data['id'],
+            'username': user_data['username'],
+            'email': user_data['email'],
+            'room': None,
+            'joined_at': datetime.now().isoformat()
+        }
+        
+        emit('login_success', {
+            'user': user_data,
+            'message': 'Login successful'
+        })
+    else:
+        emit('login_error', {'message': message})
+
 @socketio.on('join_chat')
 def handle_join_chat(data):
+    """Handle joining chat (legacy - now requires authentication)"""
     client_id = request.sid
+    
+    # Check if user is already authenticated
+    if client_id in connected_users:
+        user = connected_users[client_id]
+        emit('join_success', {'username': user['username']})
+        return
+    
+    # For backward compatibility, allow direct username join (but recommend using login)
     username = data.get('username', '').strip()
     
     if username == "":
-        emit('error', {'message': 'Username is required. Please enter the username'})
+        emit('error', {'message': 'Please use the login system or provide a username'})
         return
     
-    for user in connected_users.values():        #Checking the username is taken or not
+    # Check if this is a registered user trying to bypass login
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if cursor.fetchone():
+                emit('error', {'message': 'This username is registered. Please use login instead.'})
+                cursor.close()
+                conn.close()
+                return
+            cursor.close()
+            conn.close()
+        except Error:
+            pass
+    
+    # Allow guest users (non-registered users)
+    for user in connected_users.values():
         if user['username'].lower() == username.lower():
             emit('error', {'message': 'Username already taken. Please choose a different username'})
             return
     
     connected_users[client_id] = {
+        'user_id': None,  # Guest user
         'username': username,
+        'email': None,
         'room': None,
         'joined_at': datetime.now().isoformat()
     }
     
-    print(f"{username} joined")
+    print(f"Guest user {username} joined")
     emit('join_success', {'username': username})
 
 @socketio.on('join_room')
