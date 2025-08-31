@@ -36,7 +36,7 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     ping_timeout=300,  # as suggested added session timeout - 5 minutes
     ping_interval=60,  
-    async_mode='eventlet'
+    async_mode='threading'
 )
 
 # Authentication functions are defined from here
