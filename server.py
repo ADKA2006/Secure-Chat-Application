@@ -47,13 +47,13 @@ def create_user(username, password):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return False, "Username already exists"
         
         password_hash = hash_password(password)
         cursor.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash)
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, password_hash)
         )
         conn.commit()
         return True, "User created successfully"
@@ -74,7 +74,7 @@ def authenticate_user(username, password):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+            "SELECT id, username, password_hash FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         
         if not user:
@@ -92,29 +92,6 @@ def authenticate_user(username, password):
     except Error as e:
         print(f"Database error: {e}")
         return False, None, f"Database error: {e}"
-    finally:
-        cursor.close()
-        conn.close()
-
-def get_user_by_id(user_id):
-    conn = get_db_connection()
-    if not conn:
-        return None
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, username FROM users WHERE id = ?",(user_id))
-        user = cursor.fetchone()
-        
-        if user:
-            return {
-                'id': user[0],'username': user[1]}
-        return None
-        
-    except Error as e:
-        print(f"Database error: {e}")
-        return None
     finally:
         cursor.close()
         conn.close()
@@ -172,14 +149,11 @@ def handle_disconnect():
 #Chat thing,room thing,.....
 @socketio.on('register_user')
 def handle_register(data):
-    """Handle user registration"""
     client_id = request.sid
     username = data.get('username', '').strip()
-    email = data.get('email', '').strip()
     password = data.get('password', '').strip()
-    
-    # Validation
-    if not username or not email or not password:
+
+    if username == "" or password == "":
         emit('register_error', {'message': 'All fields are required'})
         return
     
@@ -190,14 +164,9 @@ def handle_register(data):
     if len(password) < 6:
         emit('register_error', {'message': 'Password must be at least 6 characters long'})
         return
-    
-    if '@' not in email or '.' not in email:
-        emit('register_error', {'message': 'Please enter a valid email address'})
-        return
-    
-    # Create user
-    success, message = create_user(username, email, password)
-    
+
+    success, message = create_user(username, password)
+
     if success:
         emit('register_success', {
             'message': message,
@@ -208,27 +177,22 @@ def handle_register(data):
 
 @socketio.on('login_user')
 def handle_login(data):
-    """Handle user login"""
     client_id = request.sid
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
     
-    if not username or not password:
+    if username == "" or password == "":
         emit('login_error', {'message': 'Username and password are required'})
         return
     
     success, user_data, message = authenticate_user(username, password)
     
     if success:
-        # Store user session
         session['user_id'] = user_data['id']
         session['username'] = user_data['username']
-        
-        # Store in connected users
         connected_users[client_id] = {
             'user_id': user_data['id'],
             'username': user_data['username'],
-            'email': user_data['email'],
             'room': None,
             'joined_at': datetime.now().isoformat()
         }
@@ -239,57 +203,6 @@ def handle_login(data):
         })
     else:
         emit('login_error', {'message': message})
-
-@socketio.on('join_chat')
-def handle_join_chat(data):
-    """Handle joining chat (legacy - now requires authentication)"""
-    client_id = request.sid
-    
-    # Check if user is already authenticated
-    if client_id in connected_users:
-        user = connected_users[client_id]
-        emit('join_success', {'username': user['username']})
-        return
-    
-    # For backward compatibility, allow direct username join (but recommend using login)
-    username = data.get('username', '').strip()
-    
-    if username == "":
-        emit('error', {'message': 'Please use the login system or provide a username'})
-        return
-    
-    # Check if this is a registered user trying to bypass login
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-            if cursor.fetchone():
-                emit('error', {'message': 'This username is registered. Please use login instead.'})
-                cursor.close()
-                conn.close()
-                return
-            cursor.close()
-            conn.close()
-        except Error:
-            pass
-    
-    # Allow guest users (non-registered users)
-    for user in connected_users.values():
-        if user['username'].lower() == username.lower():
-            emit('error', {'message': 'Username already taken. Please choose a different username'})
-            return
-    
-    connected_users[client_id] = {
-        'user_id': None,  # Guest user
-        'username': username,
-        'email': None,
-        'room': None,
-        'joined_at': datetime.now().isoformat()
-    }
-    
-    print(f"Guest user {username} joined")
-    emit('join_success', {'username': username})
 
 @socketio.on('join_room')
 def handle_join_room(data):

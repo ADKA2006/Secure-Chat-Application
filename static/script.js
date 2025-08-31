@@ -12,14 +12,23 @@ class SecureChatClient {
         this.connectSocket();
     }
 
-    // Pending is for video.
     // Initialise all the elements - Starting
     initialiseElements() {
         this.loginScreen = document.getElementById('loginScreen');
         this.mainScreen = document.getElementById('mainScreen');
-        this.usernameInput = document.getElementById('username');
-        this.joinBtn = document.getElementById('joinBtn');
+        this.loginTab = document.getElementById('loginTab');
+        this.registerTab = document.getElementById('registerTab');
+        this.loginForm = document.getElementById('loginForm');
+        this.registerForm = document.getElementById('registerForm');
+        this.loginUsername = document.getElementById('loginUsername');
+        this.loginPassword = document.getElementById('loginPassword');
+        this.loginBtn = document.getElementById('loginBtn');
         this.loginStatus = document.getElementById('loginStatus');
+        this.registerUsername = document.getElementById('registerUsername');
+        this.registerPassword = document.getElementById('registerPassword');
+        this.confirmPassword = document.getElementById('confirmPassword');
+        this.registerBtn = document.getElementById('registerBtn');
+        this.registerStatus = document.getElementById('registerStatus');
         this.currentUser = document.getElementById('currentUser');
         this.disconnectBtn = document.getElementById('disconnectBtn');
         this.roomInput = document.getElementById('roomInput');
@@ -43,13 +52,26 @@ class SecureChatClient {
     // Initialise all the elements - End
 
     // Event listeners we are adding here - Starting
-
-    // Both btn press and enter key is the standard ie the user can use both click or enter to the things
     attachEventListeners() {
-        // Login (Password thing is pending)
-        this.joinBtn.addEventListener('click', () => this.joinChat());
-        this.usernameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.joinChat();
+        // Tab switching
+        this.loginTab.addEventListener('click', () => this.showLoginForm());
+        this.registerTab.addEventListener('click', () => this.showRegisterForm());
+        this.loginBtn.addEventListener('click', () => this.handleLogin());
+        this.loginUsername.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleLogin();
+        });
+        this.loginPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleLogin();
+        });
+        this.registerBtn.addEventListener('click', () => this.handleRegister());
+        this.registerUsername.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleRegister();
+        });
+        this.registerPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleRegister();
+        });
+        this.confirmPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleRegister();
         });
         this.joinRoomBtn.addEventListener('click', () => this.joinRoom());
         this.roomInput.addEventListener('keypress', (e) => {
@@ -66,16 +88,62 @@ class SecureChatClient {
     }
     // Event listeners - End
 
-    // Defining the functions for different things -  Start
-    // Here the logic will be like when any of these functions is invoked, **emit** will be there which will relay the information to the server asking it to do the corresponding event
-    joinChat() {
-        const username = this.usernameInput.value.trim();
-        if (username == "") {
-            this.showStatus(this.loginStatus, 'Please enter a username', 'error');
+    // Authentication functions
+    showLoginForm() {
+        this.loginTab.classList.add('active');
+        this.registerTab.classList.remove('active');
+        this.loginForm.classList.add('active');
+        this.registerForm.classList.remove('active');
+    }
+    
+    showRegisterForm() {
+        this.registerTab.classList.add('active');
+        this.loginTab.classList.remove('active');
+        this.registerForm.classList.add('active');
+        this.loginForm.classList.remove('active');
+    }
+    
+    handleLogin() {
+        const username = this.loginUsername.value.trim();
+        const password = this.loginPassword.value.trim();
+
+        if (username == "" || password == "") {
+            this.showStatus(this.loginStatus, 'Please enter both username and password', 'error');
             return;
         }
-        this.showStatus(this.loginStatus, 'Username is taken', 'error');
-        this.socket.emit('join_chat', {username});
+        
+        this.showStatus(this.loginStatus, 'Logging in', 'info');
+        this.socket.emit('login_user', { username, password });
+    }
+    
+    handleRegister() {
+        const username = this.registerUsername.value.trim();
+        const password = this.registerPassword.value.trim();
+        const confirmPassword = this.confirmPassword.value.trim();
+        
+        // Validation
+        if (!username || !password || !confirmPassword) {
+            this.showStatus(this.registerStatus, 'Please fill in all fields', 'error');
+            return;
+        }
+        
+        if (username.length < 3) {
+            this.showStatus(this.registerStatus, 'Username must be at least 3 characters long', 'error');
+            return;
+        }
+        
+        if (password.length < 6) {
+            this.showStatus(this.registerStatus, 'Password must be at least 6 characters long', 'error');
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            this.showStatus(this.registerStatus, 'Passwords do not match', 'error');
+            return;
+        }
+        
+        this.showStatus(this.registerStatus, 'Creating account...', 'info');
+        this.socket.emit('register_user', { username, password });
     }
 
     joinRoom() {
@@ -97,7 +165,6 @@ class SecureChatClient {
         if (this.typingTimeout) {
             clearTimeout(this.typingTimeout);
         }
-        // 3 Seconds of inactivity
         this.typingTimeout = setTimeout(() => {
             this.socket.emit('user_stop_typing');
             this.isTyping = false;
@@ -108,7 +175,6 @@ class SecureChatClient {
         const message = this.messageInput.value.trim();
         if (!message) return;
         
-        // Stop typing when sending message
         if (this.isTyping) {
             this.socket.emit('user_stop_typing');
             this.isTyping = false;
@@ -125,21 +191,18 @@ class SecureChatClient {
     handleFileSelect(event) {
         const file = event.target.files[0];
         if (!file) return; 
-         // 1 kb = 1024 bytes and 1 MB = 1024 * 1024 bytes. After seeing the performance we can increase the limit.
         if (file.size > 10 * 1024 * 1024) {
             this.showToast('File too large. Maximum is 10 MB', 'error');
             return;
         }
-
         this.uploadFile(file);
         event.target.value = ''; 
     }
 
     async uploadFile(file) {
-        const chunkSize = 64 * 1024; // 64KB chunks  
+        const chunkSize = 64 * 1024;
         const totalChunks = Math.ceil(file.size / chunkSize);
 
-        // Show progress modal
         this.showModal();
         this.fileStatus.textContent = `Uploading: ${file.name}`;
         this.updateProgress(0);
@@ -150,7 +213,7 @@ class SecureChatClient {
         });
 
         while (!this.currentTransferId) {
-            await new Promise(resolve => setTimeout(resolve, 50));  // delay
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
 
         for (let i = 0; i < totalChunks; i++) {
@@ -224,19 +287,14 @@ class SecureChatClient {
         
         this.showToast(`File received: ${filename}`, 'success');
     }
-    //Just like the upload thing for chunks
+
     downloadFile(filename, base64Data) {
         try {
-            console.log('Attempting to download file:', filename);
-            console.log('Base64 data length:', base64Data.length);
-            console.log('Base64 data preview:', base64Data.substring(0, 100) + '...');
-            
-            if (!base64Data || base64Data.length === 0) {   // validatong base64
+            if (!base64Data || base64Data.length === 0) {
                 throw new Error('Empty or invalid base64 data');
             }
 
-            const cleanBase64 = base64Data.replace(/\s/g, '');  //Was showing error without this remember in future
-            
+            const cleanBase64 = base64Data.replace(/\s/g, '');
             const byteCharacters = atob(cleanBase64);
             const byteNumbers = new Array(byteCharacters.length);
             for (let i = 0; i < byteCharacters.length; i++) {
@@ -244,8 +302,6 @@ class SecureChatClient {
             }
             const byteArray = new Uint8Array(byteNumbers);
             const blob = new Blob([byteArray]);
-            
-            console.log('Blob created successfully, size:', blob.size);
             
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -257,9 +313,7 @@ class SecureChatClient {
             URL.revokeObjectURL(url);
             this.showToast(`Downloaded: ${filename}`, 'success');
         } catch (error) {
-            console.error('Download error details:', error);
-            console.error('Error name:', error.name);
-            console.error('Error message:', error.message);
+            console.error('Download error:', error);
             this.showToast(`Failed to download file: ${error.message}`, 'error');
         }
     }
@@ -275,6 +329,17 @@ class SecureChatClient {
     showMainScreen() {
         this.loginScreen.classList.add('hidden');
         this.mainScreen.classList.remove('hidden');
+    }
+
+    clearAuthForms() {
+        this.loginUsername.value = '';
+        this.loginPassword.value = '';
+        this.loginStatus.textContent = '';
+        
+        this.registerUsername.value = '';
+        this.registerPassword.value = '';
+        this.confirmPassword.value = '';
+        this.registerStatus.textContent = '';
     }
 
     showModal() {
@@ -309,7 +374,6 @@ class SecureChatClient {
         
         this.toastContainer.appendChild(toast);
         
-        // Auto remove after 3 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
@@ -342,11 +406,28 @@ class SecureChatClient {
             this.showToast('Connection lost', 'error');
         });
 
-        this.socket.on('join_success', (data) => {
-            this.username = data.username;
+        // Authentication event handlers
+        this.socket.on('login_success', (data) => {
+            this.username = data.user.username;
             this.currentUser.textContent = `Username: ${this.username}`;
             this.showMainScreen();
-            this.showToast('Welcome to Secure Chat Application', 'success');
+            this.showToast('Login successful!', 'success');
+            this.clearAuthForms();
+        });
+
+        this.socket.on('login_error', (data) => {
+            this.showStatus(this.loginStatus, data.message, 'error');
+        });
+
+        this.socket.on('register_success', (data) => {
+            this.showStatus(this.registerStatus, data.message, 'success');
+            this.showToast('Account created successfully! Please login', 'success');
+            this.showLoginForm();
+            this.clearAuthForms();
+        });
+
+        this.socket.on('register_error', (data) => {
+            this.showStatus(this.registerStatus, data.message, 'error');
         });
 
         this.socket.on('room_joined', (data) => {
@@ -365,7 +446,6 @@ class SecureChatClient {
                 }
             }
             
-            // Enable chat
             this.messageInput.disabled = false;
             this.messageInput.placeholder = 'Type your message';
             this.sendBtn.disabled = false;
@@ -394,12 +474,10 @@ class SecureChatClient {
             }
         });
         
-        // Message events
         this.socket.on('new_message', (data) => {
             this.addMessage(data.username, data.message, data.timestamp);
         });
 
-        // File transfer events
         this.socket.on('transfer_ready', (data) => {
             this.currentTransferId = data.transfer_id;
         });
@@ -416,7 +494,6 @@ class SecureChatClient {
             this.addFileMessage(data.filename, data.file_data, data.sender);
         });
 
-        // Universal Error events -  If the server sends an error let this catch
         this.socket.on('error', (data) => {
             this.showToast(data.message, 'error');
         });
