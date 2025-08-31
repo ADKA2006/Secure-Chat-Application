@@ -30,7 +30,14 @@ def get_db_connection():
         print(f"Error connecting to MySQL/MariaDB: {e}")
         return None
 
-socketio = SocketIO(app, logger=True, cors_allowed_origins="*")
+socketio = SocketIO(
+    app, 
+    logger=True, 
+    cors_allowed_origins="*",
+    ping_timeout=300,  # as suggested added session timeout - 5 minutes
+    ping_interval=60,  
+    async_mode='eventlet'
+)
 
 # Authentication functions are defined from here
 def hash_password(password):
