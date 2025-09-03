@@ -7,12 +7,46 @@ import ssl
 import base64
 import bcrypt
 from datetime import datetime
+#from Crypto.Cipher import AES
+#from Crypto.Random import get_random_bytes
+
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sem3icnproject'
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
+
+'''
+private_key = b'this_is_the_key_for_ICN_project=' #or do get_random_bytes(32)
+
+def encrypt_thing(message):
+    try:
+        # text → binary → AES encrypt → binary → base64 → text
+        cipherText = AES.new(private_key, AES.MODE_GCM)
+        encrypted_data, tag = cipherText.encrypt_and_digest(message.encode('utf-8'))
+        # nonce + tag + encrypted_data ===> encoded as base64
+        result = base64.b64encode(cipherText.nonce + tag + encrypted_data).decode('utf-8')
+        return result
+    except Exception:
+        print("Encryption error")
+        return message  
+
+def decrypt_thing(encrypted_message):
+    try:
+        # text → binary → base64 decode → binary → AES decrypt → binary → text
+        data = base64.b64decode(encrypted_message.encode('utf-8'))
+        # nonce(16 bytes) + tag(16bytes) + encrypted_data(32 bytes)
+        nonce = data[:16]  
+        tag = data[16:32]  
+        encrypted_data = data[32:] 
+        cipherText = AES.new(private_key, AES.MODE_GCM, nonce=nonce)
+        decrypted = cipherText.decrypt_and_verify(encrypted_data, tag)
+        return decrypted.decode('utf-8')
+    except Exception as e:
+        print(f"Decryption error {e}")
+        return encrypted_message  
+'''
 
 # Database configuration - MariaDB
 DB_CONFIG = {
@@ -285,13 +319,14 @@ def handle_message(data):
     if message == "":
         return
     
+    # Message is already encrypted by client, just forward it
     message_data = {
         'username': user['username'],
-        'message': message,
+        'message': message,  # Already encrypted by client
         'timestamp': datetime.now().strftime('%H:%M')
     }
     
-    print(f"{user['username']} in {user['room']} send: {message}")
+    print(f"{user['username']} in {user['room']} send encrypted message {message}")
     emit('new_message', message_data, room=user['room'])
 
 # User typing thing

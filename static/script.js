@@ -6,10 +6,61 @@ class SecureChatClient {
         this.currentTransferId = null;
         this.typingTimeout = null;
         this.isTyping = false;
-        
+        this.private_key = new TextEncoder().encode('this_is_the_key_for_ICN_project=');
+
         this.initialiseElements();
         this.attachEventListeners();
         this.connectSocket();
+    }
+
+    async Encrypt(message) {
+        try {
+            const nonce = crypto.getRandomValues(new Uint8Array(16));
+            const key = await crypto.subtle.importKey(
+                'raw', this.private_key, { name: 'AES-GCM' }, false, ['encrypt']);
+            
+            const messageData = new TextEncoder().encode(message);
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+                key,
+                messageData
+            );
+            
+            const encryptedArray = new Uint8Array(encrypted);
+            const tag = encryptedArray.slice(-16);
+            const encryptedData = encryptedArray.slice(0, -16);
+            
+            const combined = new Uint8Array(16 + 16 + encryptedData.length);
+            combined.set(nonce, 0);
+            combined.set(tag, 16);
+            combined.set(encryptedData, 32);
+            
+            return btoa(String.fromCharCode(...combined));
+        } catch (error) {
+            console.log('Encryption failed');
+            return message;
+        }
+    }
+
+    async Decrypt(encryptedMessage) {
+        try {
+            const data = Uint8Array.from(atob(encryptedMessage), c => c.charCodeAt(0));
+            const nonce = data.slice(0, 16);
+            const tag = data.slice(16, 32);
+            const encryptedData = data.slice(32);
+            const key = await crypto.subtle.importKey(
+                'raw', this.private_key, { name: 'AES-GCM' }, false, ['decrypt']);
+
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: nonce, tagLength: 128 },key,
+                new Uint8Array([...encryptedData, ...tag])
+            );
+            
+            return new TextDecoder().decode(decrypted);
+        } catch (error) {
+            console.log('Decryption failed');
+            return encryptedMessage; 
+        }
     }
 
     // Initialise all the elements - Starting
@@ -171,7 +222,7 @@ class SecureChatClient {
         }, 3000);
     }
 
-    sendMessage() {
+    async sendMessage() {
         const message = this.messageInput.value.trim();
         if (!message) return;
         
@@ -184,7 +235,8 @@ class SecureChatClient {
             }
         }
         
-        this.socket.emit('send_message', { message });
+        const encryptedMessage = await this.Encrypt(message);
+        this.socket.emit('send_message', { message: encryptedMessage });
         this.messageInput.value = '';
     }
 
@@ -474,8 +526,9 @@ class SecureChatClient {
             }
         });
         
-        this.socket.on('new_message', (data) => {
-            this.addMessage(data.username, data.message, data.timestamp);
+        this.socket.on('new_message', async (data) => {
+            const decryptedMessage = await this.Decrypt(data.message);
+            this.addMessage(data.username, decryptedMessage, data.timestamp);
         });
 
         this.socket.on('transfer_ready', (data) => {
