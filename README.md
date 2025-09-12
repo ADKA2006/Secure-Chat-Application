@@ -1,16 +1,17 @@
 # Secure Chat App
 
-A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS, and JavaScript. Now supports file sharing, planned real-time video, AES encryption, and ESP clients.
+A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS, and JavaScript. Features user authentication, AES encryption, file sharing, real-time video calling and room-based communication.
 
 ---
 
 ## Features
 
--  **Secure Communication:** Real-time WebSocket chat
+-  **User Authentication:** Secure user registration and login with bcrypt password hashing
+-  **AES Encryption:** End-to-end AES-GCM encryption for all messages
+-  **Secure Communication:** Real-time WebSocket chat with SSL/TLS support
 -  **Room-based Chat:** Join and switch between chat rooms
--  **File Sharing:** Upload/download files (up to 10MB)
+-  **File Sharing:** Upload/download files (up to 10MB) 
 -  **Real-time Video (Planned):** Video streaming between users *(coming soon)*
--  **AES Encryption (Planned):** End-to-end encrypted messages and files *(coming soon)*
 -  **ESP Client Support:** ESP devices can join as chat/file transfer clients *(coming soon)*
 -  **Multi-user Support:** Multiple users per room
 -  **Modern UI:** Responsive, animated interface
@@ -18,6 +19,25 @@ A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS
 ---
 
 ## Quick Start
+
+### Prerequisites
+- Python 3.7+
+- MySQL/MariaDB server
+- pip (Python package manager)
+
+### Database Setup
+1. Install and start MySQL/MariaDB server
+2. Create database and user:
+   ```sql
+   CREATE DATABASE secure_chat_db;
+   CREATE USER 'admin'@'localhost' IDENTIFIED BY '12345';
+   GRANT ALL PRIVILEGES ON secure_chat_db.* TO 'admin'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+3. Import the database schema:
+   ```bash
+   mysql -u admin -p secure_chat_db < setup_database.sql
+   ```
 
 ### Option 1: Automated Setup (Recommended)
 ```bash
@@ -51,17 +71,19 @@ Open your browser at `http://localhost:4000` (or your server IP).
 
 ```
 secure-chat-app/
-├── server.py              # Flask-SocketIO server
+├── server.py              # Flask-SocketIO server with authentication & encryption
 ├── requirements.txt       # Python dependencies
 ├── setup.sh               # Setup script
 ├── run_app.sh             # Run script
+├── setup_database.sql     # Database schema for user authentication
+├── generate_cert.sh       # SSL certificate generation script
 ├── README.md              # This file
 ├── static/
 │   ├── style.css          # CSS styling
-│   ├── script.js          # Client-side JS
+│   ├── script.js          # Client-side JS with AES encryption
 │   └── socket.io.js       # Socket.IO client (local)
 ├── templates/
-│   └── index.html         # Main HTML template
+│   └── index.html         # Main HTML template with auth forms
 ├── cert.pem, key.pem      # SSL certificates
 └── venv/                  # Python virtual environment (not tracked by git)
 ```
@@ -70,28 +92,28 @@ secure-chat-app/
 
 ## How to Use
 
-### Joining a Chat
-- Enter your username on the login screen
-- Click "Join Chat" to connect
+### User Registration & Login
+- **Register:** Create a new account with username (min 3 chars) and password (min 6 chars)
+- **Login:** Sign in with your registered credentials
+- All passwords are securely hashed using bcrypt
 
-### Joining a Room
-- Enter a room name
-- Click "Join Room"
-- See the list of users in the room
+### Joining a Chat Room
+- After login, enter a room name to join or create a room
+- See the list of users currently in the room
 
-### Chatting
-- Type messages and send in real-time
+### Secure Messaging
+- All messages are automatically encrypted with AES-GCM before sending
+- Messages are decrypted on the client side for display
+- Real-time typing indicators show when others are typing
 
 ### File Sharing
 - Click 📎 File to upload (max 10MB)
 - Progress bar shows upload status
-- Others can download shared files
+- Files are transferred in encrypted chunks
+- Others can download shared files by clicking on them
 
 ### Real-time Video *(Planned)*
 - Click 🎥 Video to start a video stream (feature coming soon)
-
-### AES Encryption *(Planned)*
-- All messages and files will be encrypted with AES for privacy (feature coming soon)
 
 ### ESP Client Support
 - ESP devices can connect as clients for chat and file transfer (feature coming soon)
@@ -103,9 +125,50 @@ secure-chat-app/
 - **Backend:** Python Flask + Flask-SocketIO
 - **Frontend:** Vanilla JS + HTML5 + CSS3
 - **Communication:** WebSocket via Socket.IO
-- **File Transfer:** Chunked, base64-encoded
-- **Security:**  AES encryption
-- **ESP Integration:** Custom protocol for ESP clients
+- **Authentication:** 
+  - User registration and login system
+  - bcrypt password hashing for secure storage
+  - Session management with Flask sessions
+- **Encryption:** 
+  - AES-GCM 256-bit encryption for all messages
+  - Client-side encryption/decryption using Web Crypto API
+  - Secure key management with random nonces
+- **Database:** MySQL/MariaDB for user data storage
+- **File Transfer:** Chunked, base64-encoded with progress tracking
+- **Security:**  
+  - SSL/TLS support with self-signed certificates
+  - Secure password storage with salt
+  - Real-time encrypted communication
+- **ESP Integration:** Custom protocol for ESP clients *(coming soon)*
+
+---
+
+## Security Features
+
+### Authentication System
+- **User Registration:** Secure account creation with input validation
+- **Password Security:** bcrypt hashing with salt for password storage
+- **Login Verification:** Database-backed authentication system
+- **Session Management:** Secure session handling with Flask sessions
+- **Input Validation:** Username and password requirements
+
+### AES Encryption Implementation
+- **Algorithm:** AES-GCM (Galois/Counter Mode) for authenticated encryption
+- **Key Size:** 256-bit encryption key
+- **Client-Side Encryption:** Messages encrypted before transmission using Web Crypto API
+- **Nonce Generation:** Cryptographically secure random nonces for each message
+- **Tag Verification:** Built-in authentication tag prevents tampering
+- **Real-time Protection:** All chat messages are encrypted end-to-end
+
+### Network Security
+- **SSL/TLS Support:** HTTPS connections with self-signed certificates
+- **Secure WebSocket:** WSS (WebSocket Secure) for encrypted real-time communication
+- **CORS Protection:** Controlled cross-origin resource sharing
+
+### Database Security
+- **Prepared Statements:** SQL injection prevention
+- **Password Hashing:** No plain-text password storage
+- **Connection Security:** Secure database connection handling
 
 ---
 
@@ -142,8 +205,12 @@ secure-chat-app/
 ## Troubleshooting
 
 - **Connection Issues:** Check firewall, port, and browser console
+- **Database Connection:** Ensure MySQL/MariaDB is running and credentials are correct
+- **Authentication Problems:** Verify database schema is imported correctly
+- **SSL/HTTPS Issues:** Check certificate files (cert.pem, key.pem) are present
 - **File Upload Issues:** Ensure file <10MB, check browser console
 - **Socket.IO Issues:** Use local `socket.io.js` for offline/CDN-restricted networks
+- **Encryption Errors:** Check browser console for Web Crypto API support (requires HTTPS/localhost)
 
 ---
 

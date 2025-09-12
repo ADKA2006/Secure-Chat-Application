@@ -12,7 +12,10 @@ class SecureChatClient {
         this.attachEventListeners();
         this.connectSocket();
     }
-
+    // getRandomVlaues
+    // Import Key
+    // encrypt
+    // decrypt
     async Encrypt(message) {
         try {
             const nonce = crypto.getRandomValues(new Uint8Array(16));
