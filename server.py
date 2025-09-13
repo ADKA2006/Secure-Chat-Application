@@ -6,7 +6,7 @@ import uuid
 import ssl
 import base64
 import bcrypt
-from datetime import datetime
+from datetime import datetime,timedelta
 #from Crypto.Cipher import AES
 #from Crypto.Random import get_random_bytes
 
@@ -142,7 +142,16 @@ connected_users = {} # {client_id: {user_id: ..., username: ..., room: ..., join
 active_rooms = {} # {room_id: {users: [...], created_at: ...}}
 file_transfers = {} # {transfer_id: {file_name: ..., file_size: ..., total_chunks: ...,chunks:{...} sender: ..., room/receiver:.... , time: ...}}
 users_typing = {} # {room_id: set([usernames])}
+login_attempts = {} # {username: [attempt_count,last_attempt_time]}
 
+def cleanup_login_attempts():
+    current_time = datetime.now()
+    expired_users = []
+    for i,j in login_attempts.items():
+        if current_time - j[1] > timedelta(seconds=300):
+            expired_users.append(i)
+    for user in expired_users:
+        del login_attempts[user]
 
 @app.route('/')   #Get only
 def index():
@@ -219,31 +228,41 @@ def handle_register(data):
 @socketio.on('login_user')
 def handle_login(data):
     client_id = request.sid
+    cleanup_login_attempts()
     username = data.get('username', '').strip()
+    if login_attempts.get(username) is None:
+        login_attempts[username] = [0, datetime.now()]
     password = data.get('password', '').strip()
-    
-    if username == "" or password == "":
-        emit('login_error', {'message': 'Username and password are required'})
-        return
-    
-    success, user_data, message = authenticate_user(username, password)
-    
-    if success:
-        session['user_id'] = user_data['id']
-        session['username'] = user_data['username']
-        connected_users[client_id] = {
-            'user_id': user_data['id'],
-            'username': user_data['username'],
-            'room': None,
-            'joined_at': datetime.now().isoformat()
-        }
-        
-        emit('login_success', {
-            'user': user_data,
-            'message': 'Login successful'
-        })
+
+    if login_attempts[username][0] >= 3:
+            emit('login_error', {'message': 'Too many failed login attempts. Please try again later.'})
+            return
     else:
-        emit('login_error', {'message': message})
+        if username == "" or password == "":
+            emit('login_error', {'message': 'Username and password are required'})
+            return
+        
+        success, user_data, message = authenticate_user(username, password)
+        
+        if success:
+            session['user_id'] = user_data['id']
+            session['username'] = user_data['username']
+            connected_users[client_id] = {
+                'user_id': user_data['id'],
+                'username': user_data['username'],
+                'room': None,
+                'joined_at': datetime.now().isoformat()
+            }
+            
+            emit('login_success', {
+                'user': user_data,
+                'message': 'Login successful'
+            })
+            del login_attempts[username]  
+        else:
+            emit('login_error', {'message': message})
+            login_attempts[username][0] += 1
+            login_attempts[username][1] = datetime.now()
 
 @socketio.on('join_room')
 def handle_join_room(data):
