@@ -76,10 +76,9 @@
             <div class="chat-area">
                 <div id="messages" class="messages"></div>
                 <div class="message-input">
-                    <label for="fileInput" class="btn secondary file-btn">📎 File</label>
+                    <label for="fileInput" class="btn secondary file-btn">📎</label>
                     <input type="file" id="fileInput" style="display: none;" disabled>
-                    <label for="videoinput" class="btn secondary file-btn">📹 Video</label>
-                    <input type="file" id="videoinput" style="display: none;" disabled>
+                    <button id="videoCallBtn" class="btn secondary file-btn" disabled>📹</button>
                     <input type="text" id="messageInput" placeholder="Join a room to start chatting" disabled>
                     <button id="sendBtn" class="btn primary" disabled>Send</button>
                 </div>
@@ -99,6 +98,27 @@
                 </div>
                 <div id="fileStatus"></div>
                 <button id="closeModalBtn" class="btn secondary">Close</button>
+            </div>
+        </div>
+
+        <!-- Video Call Modal -->
+        <div id="videoModal" class="modal hidden">
+            <div class="modal-content video-modal">
+                <div class="video-header">
+                    <h3 id="videoCallTitle">Group Video Call</h3>
+                    <div class="call-info">
+                        <span id="participantCount">0 participants</span>
+                    </div>
+                    <button id="closeVideoBtn" class="btn secondary">✕</button>
+                </div>
+                <div class="video-grid" id="videoGrid">
+                </div>
+                <div class="video-controls">
+                    <button id="muteToggleBtn" class="btn secondary">Mute</button>
+                    <button id="videoToggleBtn" class="btn secondary">Video</button>
+                    <button id="endCallBtn" class="btn danger">End Call</button>
+                </div>
+                <div id="videoStatus" class="status"></div>
             </div>
         </div>
 

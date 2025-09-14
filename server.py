@@ -143,6 +143,7 @@ active_rooms = {} # {room_id: {users: [...], created_at: ...}}
 file_transfers = {} # {transfer_id: {file_name: ..., file_size: ..., total_chunks: ...,chunks:{...} sender: ..., room/receiver:.... , time: ...}}
 users_typing = {} # {room_id: set([usernames])}
 login_attempts = {} # {username: [attempt_count,last_attempt_time]}
+video_calls = {} # {room_id: {participants: [usernames], status: 'active/ended', started_at: timestamp}}
 
 def cleanup_login_attempts():
     current_time = datetime.now()
@@ -235,7 +236,7 @@ def handle_login(data):
     password = data.get('password', '').strip()
 
     if login_attempts[username][0] >= 3:
-            emit('login_error', {'message': 'Too many failed login attempts. Please try again later.'})
+            emit('login_error', {'message': 'Too many failed login attempts. Please try again later (5 minutes).'})
             return
     else:
         if username == "" or password == "":
@@ -464,6 +465,122 @@ def handle_file_chunk(data):
             print(f"Error reconstructing file: {e}")
             emit('error', {'message': 'File reconstruction failed'})
             del file_transfers[transfer_id]
+
+@socketio.on('join_video_call')
+def handle_join_video_call():
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    if not user.get('room'):
+        emit('error', {'message': 'You are not in any room'})
+        return
+    
+    room_id = user['room']
+    username = user['username']
+    
+    if room_id not in video_calls:
+        video_calls[room_id] = {
+            'participants': [],
+            'status': 'active',
+            'started_at': datetime.now().isoformat()
+        }
+    
+    if username not in video_calls[room_id]['participants']:  # Add user to the dictionary if not present
+        video_calls[room_id]['participants'].append(username)
+        
+        print(f"{username} joined video call in room {room_id}")
+        emit('user_joined_video_call', {
+            'username': username,
+            'participants': video_calls[room_id]['participants']
+        }, room=room_id)
+        emit('video_call_participants', {
+            'participants': [p for p in video_calls[room_id]['participants'] if p != username]
+        })
+    else:
+        emit('video_call_participants', {
+            'participants': [p for p in video_calls[room_id]['participants'] if p != username]
+        })
+
+@socketio.on('leave_video_call')
+def handle_leave_video_call():
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    room_id = user.get('room')
+    username = user['username']
+    
+    if room_id in video_calls and username in video_calls[room_id]['participants']:
+        video_calls[room_id]['participants'].remove(username)
+        
+        print(f"{username} left video call in room {room_id}")
+
+        emit('user_left_video_call', {
+            'username': username,
+            'participants': video_calls[room_id]['participants']
+        }, room=room_id, include_self=False)
+        if len(video_calls[room_id]['participants']) == 0:
+            del video_calls[room_id]
+            print(f"Video call ended in room {room_id} - no participants left")
+
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    room_id = user.get('room')
+    target_user = data.get('target_user')
+    
+    if room_id and room_id in video_calls:
+        emit('webrtc_offer', {
+            'offer': data.get('offer'),
+            'from_user': user['username'],
+            'target_user': target_user   
+        }, room=room_id, include_self=False)  # All the users in the room is getting the offer (sender not getting)
+
+@socketio.on('webrtc_answer')
+def handle_webrtc_answer(data):
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    room_id = user.get('room')
+    target_user = data.get('target_user')
+    
+    if room_id and room_id in video_calls:
+        emit('webrtc_answer', {
+            'answer': data.get('answer'),
+            'from_user': user['username'],
+            'target_user': target_user
+        }, room=room_id, include_self=False)
+
+@socketio.on('webrtc_ice_candidate')
+def handle_webrtc_ice_candidate(data):
+    client_id = request.sid
+    if client_id not in connected_users:
+        emit('error', {'message': 'The given client id is not part of the connected users'})
+        return
+    
+    user = connected_users[client_id]
+    room_id = user.get('room')
+    target_user = data.get('target_user')
+    
+    if room_id and room_id in video_calls:
+        emit('webrtc_ice_candidate', {
+            'candidate': data.get('candidate'),
+            'from_user': user['username'],
+            'target_user': target_user
+        }, room=room_id, include_self=False)
 
 if __name__ == '__main__':
     print("Starting Secure Chat Server")

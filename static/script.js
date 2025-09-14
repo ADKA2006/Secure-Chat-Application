@@ -7,6 +7,13 @@ class SecureChatClient {
         this.typingTimeout = null;
         this.isTyping = false;
         this.private_key = new TextEncoder().encode('this_is_the_key_for_ICN_project=');
+        
+        // Group video call properties
+        this.localStream = null;
+        this.peerConnections = new Map(); // Map of username -> RTCPeerConnection
+        this.remoteStreams = new Map(); // Map of username -> MediaStream
+        this.isInCall = false;
+        this.participants = new Set();
 
         this.initialiseElements();
         this.attachEventListeners();
@@ -102,6 +109,16 @@ class SecureChatClient {
         this.fileStatus = document.getElementById('fileStatus');
         this.closeModalBtn = document.getElementById('closeModalBtn');
         this.toastContainer = document.getElementById('toastContainer');
+        this.videoCallBtn = document.getElementById('videoCallBtn');
+        this.videoModal = document.getElementById('videoModal');
+        this.videoCallTitle = document.getElementById('videoCallTitle');
+        this.videoGrid = document.getElementById('videoGrid');
+        this.participantCount = document.getElementById('participantCount');
+        this.muteToggleBtn = document.getElementById('muteToggleBtn');
+        this.videoToggleBtn = document.getElementById('videoToggleBtn');
+        this.endCallBtn = document.getElementById('endCallBtn');
+        this.closeVideoBtn = document.getElementById('closeVideoBtn');
+        this.videoStatus = document.getElementById('videoStatus');
     }
     // Initialise all the elements - End
 
@@ -136,9 +153,16 @@ class SecureChatClient {
         this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
         });
+
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         this.closeModalBtn.addEventListener('click', () => this.hideModal());
         this.disconnectBtn.addEventListener('click', () => this.disconnect());
+        
+        this.videoCallBtn.addEventListener('click', () => this.joinVideoCall());
+        this.muteToggleBtn.addEventListener('click', () => this.toggleMute());
+        this.videoToggleBtn.addEventListener('click', () => this.toggleVideo());
+        this.endCallBtn.addEventListener('click', () => this.leaveVideoCall());
+        this.closeVideoBtn.addEventListener('click', () => this.leaveVideoCall());
     }
     // Event listeners - End
 
@@ -443,6 +467,326 @@ class SecureChatClient {
         location.reload();
     }
 
+    // Group Video Call Methods
+    async joinVideoCall() {
+        if (this.isInCall) {
+            this.showToast('You are already in a video call', 'error');
+            return;
+        }
+        
+        if (!this.currentRoom) {
+            this.showToast('You must be in a room to start a video call', 'error');
+            return;
+        }
+        
+        try {
+            await this.setupLocalStream();
+            this.socket.emit('join_video_call');
+            this.isInCall = true;
+            this.showVideoModal();
+            this.showVideoStatus('Joining video call', 'info');
+        } catch (error) {
+            console.error('Error joining video call:', error);
+            this.showToast('Failed to join video call', 'error');
+        }
+    }
+
+    async setupLocalStream() {
+        try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({  // mediadevices API
+                video: true,
+                audio: true
+            });
+            this.addLocalVideoToGrid();
+            return true;
+        } catch (error) {
+            console.error('Error accessing media devices:', error);
+            this.showToast('Could not access camera/microphone', 'error');
+            throw error;
+        }
+    }
+
+    addLocalVideoToGrid() {
+        const existingLocal = document.querySelector('.video-participant.local');
+        if (existingLocal) {
+            existingLocal.remove();
+        }
+
+        const videoContainer = document.createElement('div');
+        videoContainer.className = 'video-participant local';
+        videoContainer.id = `participant-${this.username}`;
+
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = this.localStream;
+
+        const participantInfo = document.createElement('div');
+        participantInfo.className = 'participant-info';
+        participantInfo.textContent = `${this.username} (You)`;
+
+        videoContainer.appendChild(video);
+        videoContainer.appendChild(participantInfo);
+        this.videoGrid.appendChild(videoContainer);
+
+        this.participants.add(this.username);
+        this.updateGridLayout();
+    }
+
+    async createPeerConnection(username) {
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        const peerConnection = new RTCPeerConnection(configuration);
+        if (this.localStream) {   // Add local stream to peer connection
+            this.localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, this.localStream);
+            });
+        }
+        peerConnection.ontrack = (event) => {
+            console.log('Received remote stream from:', username);
+            this.remoteStreams.set(username, event.streams[0]);
+            this.addRemoteVideoToGrid(username, event.streams[0]);
+        };
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) { // ICE Candidate
+                this.socket.emit('webrtc_ice_candidate', {
+                    candidate: event.candidate,
+                    target_user: username
+                });
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            console.log(`Connection state with ${username}:`, peerConnection.connectionState);
+            if (peerConnection.connectionState === 'connected') {
+                this.showVideoStatus(`Connected to ${username}`, 'success');
+            } else if (peerConnection.connectionState === 'disconnected' || 
+                       peerConnection.connectionState === 'failed') {
+                this.handlePeerDisconnection(username);
+            }
+        };
+
+        this.peerConnections.set(username, peerConnection);
+        return peerConnection;
+    }
+
+    addRemoteVideoToGrid(username, stream) {
+        const existingVideo = document.getElementById(`participant-${username}`);
+        if (existingVideo) {
+            existingVideo.remove();
+        }
+
+        const videoContainer = document.createElement('div');
+        videoContainer.className = 'video-participant remote';
+        videoContainer.id = `participant-${username}`;
+
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+
+        const participantInfo = document.createElement('div');
+        participantInfo.className = 'participant-info';
+        participantInfo.textContent = username;
+
+        videoContainer.appendChild(video);
+        videoContainer.appendChild(participantInfo);
+        this.videoGrid.appendChild(videoContainer);
+
+        this.participants.add(username);
+        this.updateGridLayout();
+    }
+
+    updateGridLayout() {
+        const participantCount = this.participants.size;
+        this.participantCount.textContent = `${participantCount} participant${participantCount !== 1 ? 's' : ''}`;
+        this.videoGrid.className = 'video-grid';
+        if (participantCount <= 1) {
+            this.videoGrid.classList.add('participants-1');
+        } else if (participantCount === 2) {
+            this.videoGrid.classList.add('participants-2');
+        } else if (participantCount <= 4) {
+            this.videoGrid.classList.add('participants-4');
+        } else if (participantCount <= 6) {
+            this.videoGrid.classList.add('participants-6');
+        } else if (participantCount <= 9) {
+            this.videoGrid.classList.add('participants-9');
+        } else {
+            this.videoGrid.classList.add('participants-many');
+        }
+    }
+
+    async handleNewParticipant(username) {
+        if (username === this.username) return;
+
+        console.log('Creating peer connection for new participant:', username);
+        const peerConnection = await this.createPeerConnection(username);
+        try {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            this.socket.emit('webrtc_offer', {
+                offer: offer,
+                target_user: username
+            });
+        } catch (error) {
+            console.error('Error creating offer for', username, ':', error);
+        }
+    }
+
+    async handleOffer(offer, fromUser) {
+        if (fromUser === this.username) return;
+
+        console.log('Handling offer from:', fromUser);
+        let peerConnection = this.peerConnections.get(fromUser);
+        
+        if (!peerConnection) {
+            peerConnection = await this.createPeerConnection(fromUser);
+        }
+        
+        try {
+            await peerConnection.setRemoteDescription(offer);
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            this.socket.emit('webrtc_answer', {
+                answer: answer,
+                target_user: fromUser
+            });
+        } catch (error) {
+            console.error('Error handling offer from', fromUser, ':', error);
+        }
+    }
+
+    async handleAnswer(answer, fromUser) {
+        if (fromUser === this.username) return;
+
+        console.log('Handling answer from:', fromUser);
+        const peerConnection = this.peerConnections.get(fromUser);
+        
+        if (peerConnection) {
+            try {
+                await peerConnection.setRemoteDescription(answer);
+            } catch (error) {
+                console.error('Error handling answer from', fromUser, ':', error);
+            }
+        }
+    }
+
+    async handleIceCandidate(candidate, fromUser) {
+        if (fromUser === this.username) return;
+
+        const peerConnection = this.peerConnections.get(fromUser);
+        
+        if (peerConnection) {
+            try {
+                await peerConnection.addIceCandidate(candidate);
+            } catch (error) {
+                console.error('Error adding ICE candidate from', fromUser, ':', error);
+            }
+        }
+    }
+
+    handlePeerDisconnection(username) {
+        console.log('Peer disconnected:', username);
+        const peerConnection = this.peerConnections.get(username);
+        if (peerConnection) {
+            peerConnection.close();
+            this.peerConnections.delete(username);
+        }
+        this.remoteStreams.delete(username);
+        const videoElement = document.getElementById(`participant-${username}`);
+        if (videoElement) {
+            videoElement.remove();
+        }
+        
+        this.participants.delete(username);
+        this.updateGridLayout();
+    }
+
+    toggleMute() {
+        if (!this.localStream) return;
+        
+        const audioTrack = this.localStream.getAudioTracks()[0];
+        if (audioTrack) {
+            audioTrack.enabled = !audioTrack.enabled;
+            this.muteBtn.textContent = audioTrack.enabled ? 'Mute' : 'Unmute';
+            this.muteBtn.className = audioTrack.enabled ? 'btn secondary' : 'btn secondary muted';
+            
+            const localContainer = document.getElementById(`participant-${this.username}`);
+            if (localContainer) {
+                let mutedIndicator = localContainer.querySelector('.participant-muted');
+                if (!audioTrack.enabled) {
+                    if (!mutedIndicator) {
+                        mutedIndicator = document.createElement('div');
+                        mutedIndicator.className = 'participant-muted';
+                        mutedIndicator.textContent = 'Muted';
+                        localContainer.appendChild(mutedIndicator);
+                    }
+                } else if (mutedIndicator) {
+                    mutedIndicator.remove();
+                }
+            }
+        }
+    }
+
+    toggleVideo() {
+        if (!this.localStream) return;
+        
+        const videoTrack = this.localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            videoTrack.enabled = !videoTrack.enabled;
+            this.videoToggleBtn.textContent = videoTrack.enabled ? 'Video' : 'Video Off';
+            this.videoToggleBtn.className = videoTrack.enabled ? 'btn secondary' : 'btn secondary video-off';
+        }
+    }
+
+    leaveVideoCall() {
+        this.socket.emit('leave_video_call');
+        this.cleanupVideoCall();
+    }
+
+    cleanupVideoCall() {
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+        }
+ 
+        this.peerConnections.forEach((peerConnection, username) => {
+            peerConnection.close();
+        });
+        this.peerConnections.clear();
+        this.remoteStreams.clear();
+        this.participants.clear();
+        this.videoGrid.innerHTML = '';
+        this.isInCall = false;
+        this.muteBtn.textContent = '🎤 Mute';
+        this.muteBtn.className = 'btn secondary';
+        this.videoToggleBtn.textContent = '📹 Video';
+        this.videoToggleBtn.className = 'btn secondary';
+        this.hideVideoModal();
+    }
+
+    showVideoModal() {
+        this.videoModal.classList.remove('hidden');
+    }
+
+    hideVideoModal() {
+        this.videoModal.classList.add('hidden');
+    }
+
+    showVideoStatus(message, type) {
+        this.videoStatus.textContent = message;
+        this.videoStatus.className = `status ${type}`;
+    }
+
     connectSocket() {
         console.log('Attempting to connect to Socket.IO server');
         this.socket = io();
@@ -505,6 +849,7 @@ class SecureChatClient {
             this.messageInput.placeholder = 'Type your message';
             this.sendBtn.disabled = false;
             this.fileInput.disabled = false;
+            this.videoCallBtn.disabled = false;
             
             this.clearMessages();
             this.addSystemMessage(`Joined room: ${data.room_id}`);
@@ -552,6 +897,49 @@ class SecureChatClient {
 
         this.socket.on('error', (data) => {
             this.showToast(data.message, 'error');
+        });
+
+        // Group video call event handlers
+        this.socket.on('user_joined_video_call', (data) => {
+            console.log('User joined video call:', data.username);
+            if (data.username !== this.username) {
+                this.handleNewParticipant(data.username);
+            }
+            this.showToast(`${data.username} joined the video call`, 'info');
+        });
+
+        this.socket.on('user_left_video_call', (data) => {
+            console.log('User left video call:', data.username);
+            this.handlePeerDisconnection(data.username);
+            this.showToast(`${data.username} left the video call`, 'info');
+        });
+
+        this.socket.on('video_call_participants', (data) => {
+            console.log('Current video call participants:', data.participants);
+            data.participants.forEach(username => {
+                if (username !== this.username) {
+                    this.handleNewParticipant(username);
+                }
+            });
+        });
+
+        // WebRTC signaling events for group calls
+        this.socket.on('webrtc_offer', (data) => {
+            if (data.target_user === this.username) {
+                this.handleOffer(data.offer, data.from_user);
+            }
+        });
+
+        this.socket.on('webrtc_answer', (data) => {
+            if (data.target_user === this.username) {
+                this.handleAnswer(data.answer, data.from_user);
+            }
+        });
+
+        this.socket.on('webrtc_ice_candidate', (data) => {
+            if (data.target_user === this.username) {
+                this.handleIceCandidate(data.candidate, data.from_user);
+            }
         });
     }
 }

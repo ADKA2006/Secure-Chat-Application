@@ -424,6 +424,219 @@ input[type="password"]:disabled {
     color: #333;
 }
 
+/* Video Call Modal */
+.video-modal {
+    max-width: 95%;
+    width: 90%;
+    max-height: 90%;
+    padding: 1rem;
+}
+
+.video-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.video-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.call-info {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.video-grid {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    min-height: 300px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Dynamic grid layout based on participant count */
+.video-grid.participants-1 {
+    grid-template-columns: 1fr;
+}
+
+.video-grid.participants-2 {
+    grid-template-columns: 1fr 1fr;
+}
+
+.video-grid.participants-3,
+.video-grid.participants-4 {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+.video-grid.participants-5,
+.video-grid.participants-6 {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+.video-grid.participants-7,
+.video-grid.participants-8,
+.video-grid.participants-9 {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+}
+
+.video-grid.participants-many {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.video-participant {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-participant video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-participant.local {
+    border: 2px solid #667eea;
+}
+
+.video-participant.remote {
+    border: 2px solid #28a745;
+}
+
+.video-participant.speaking {
+    border: 3px solid #ffc107;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+}
+
+.participant-info {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    z-index: 1;
+}
+
+.participant-muted {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(220, 53, 69, 0.8);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    z-index: 1;
+}
+
+.video-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: #666;
+    background: #f8f9fa;
+}
+
+.video-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.btn.danger {
+    background: #dc3545;
+}
+
+.btn.danger:hover {
+    background: #c82333;
+}
+
+.btn.muted {
+    background: #dc3545;
+}
+
+.btn.video-off {
+    background: #dc3545;
+}
+
+#videoStatus {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+}
+
+/* Responsive video layout */
+@media (max-width: 768px) {
+    .video-grid.participants-2,
+    .video-grid.participants-3,
+    .video-grid.participants-4 {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(auto, 1fr);
+    }
+    
+    .video-grid.participants-5,
+    .video-grid.participants-6,
+    .video-grid.participants-7,
+    .video-grid.participants-8,
+    .video-grid.participants-9 {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .video-grid.participants-many {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .video-participant {
+        min-height: 120px;
+    }
+    
+    .video-controls {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .video-modal {
+        width: 95%;
+        padding: 0.5rem;
+    }
+    
+    .video-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .video-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .video-participant {
+        min-height: 200px;
+    }
+}
+
 /* Progress Bar */
 .progress-bar {
     width: 100%;
