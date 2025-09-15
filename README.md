@@ -7,11 +7,12 @@ A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS
 ## Features
 
 -  **User Authentication:** Secure user registration and login with bcrypt password hashing
--  **AES Encryption:** End-to-end AES-GCM encryption for all messages
+-  **AES Encryption:** End-to-end AES-GCM encryption for all messages using Web Crypto API
 -  **Secure Communication:** Real-time WebSocket chat with SSL/TLS support
 -  **Room-based Chat:** Join and switch between chat rooms
--  **File Sharing:** Upload/download files (up to 10MB) 
--  **Real-time Video (Planned):** Video streaming between users *(coming soon)*
+-  **File Sharing:** Upload/download files (up to 10MB)
+-  **Real-time Video Calling:** WebRTC-based group video calls with multiple participants
+-  **Advanced Security:** Login attempt limiting, session management, and secure password storage
 -  **ESP Client Support:** ESP devices can join as chat/file transfer clients *(coming soon)*
 -  **Multi-user Support:** Multiple users per room
 -  **Modern UI:** Responsive, animated interface
@@ -24,6 +25,16 @@ A secure, real-time chat application built with Python Flask-SocketIO, HTML, CSS
 - Python 3.7+
 - MySQL/MariaDB server
 - pip (Python package manager)
+- Modern web browser with WebRTC support
+
+### Required Python Packages
+- flask==2.3.3
+- flask-socketio==5.3.6
+- python-socketio==5.8.0
+- mysql-connector-python==8.1.0
+- bcrypt==4.0.1
+- flask-session==0.5.0
+- pycryptodome==3.23.0
 
 ### Database Setup
 1. Install and start MySQL/MariaDB server
@@ -112,8 +123,12 @@ secure-chat-app/
 - Files are transferred in encrypted chunks
 - Others can download shared files by clicking on them
 
-### Real-time Video *(Planned)*
-- Click 🎥 Video to start a video stream (feature coming soon)
+### Real-time Video Calling
+- Click 🎥 Video to start a group video call
+- Multiple participants can join the same video call
+- Audio and video controls: mute/unmute, camera on/off
+- Grid layout automatically adjusts based on number of participants
+- End call or close video modal to leave the call
 
 ### ESP Client Support
 - ESP devices can connect as clients for chat and file transfer (feature coming soon)
@@ -129,16 +144,23 @@ secure-chat-app/
   - User registration and login system
   - bcrypt password hashing for secure storage
   - Session management with Flask sessions
+  - Login attempt limiting (3 attempts per 5 minutes)
 - **Encryption:** 
   - AES-GCM 256-bit encryption for all messages
   - Client-side encryption/decryption using Web Crypto API
   - Secure key management with random nonces
 - **Database:** MySQL/MariaDB for user data storage
-- **File Transfer:** Chunked, base64-encoded with progress tracking
+- **File Transfer:** Chunked, base64-encoded with real-time progress tracking
+- **Video Calling:**
+  - WebRTC-based peer-to-peer group video calls
+  - Multiple participants support with grid layout
+  - Audio/video controls (mute, video toggle)
+  - STUN servers for NAT traversal
 - **Security:**  
   - SSL/TLS support with self-signed certificates
   - Secure password storage with salt
   - Real-time encrypted communication
+  - Input validation and sanitization
 - **ESP Integration:** Custom protocol for ESP clients *(coming soon)*
 
 ---
@@ -151,6 +173,8 @@ secure-chat-app/
 - **Login Verification:** Database-backed authentication system
 - **Session Management:** Secure session handling with Flask sessions
 - **Input Validation:** Username and password requirements
+- **Brute Force Protection:** Login attempt limiting (3 attempts per 5 minutes)
+- **Session Timeout:** Automatic session cleanup and timeout handling
 
 ### AES Encryption Implementation
 - **Algorithm:** AES-GCM (Galois/Counter Mode) for authenticated encryption
@@ -164,6 +188,7 @@ secure-chat-app/
 - **SSL/TLS Support:** HTTPS connections with self-signed certificates
 - **Secure WebSocket:** WSS (WebSocket Secure) for encrypted real-time communication
 - **CORS Protection:** Controlled cross-origin resource sharing
+- **WebRTC Security:** Secure peer-to-peer video communication with STUN servers
 
 ### Database Security
 - **Prepared Statements:** SQL injection prevention
@@ -199,6 +224,8 @@ secure-chat-app/
 ## Browser Compatibility
 
 - Chrome, Firefox, Safari, Edge (recent versions)
+- WebRTC support required for video calling feature
+- Web Crypto API support required for message encryption
 
 ---
 
@@ -211,6 +238,8 @@ secure-chat-app/
 - **File Upload Issues:** Ensure file <10MB, check browser console
 - **Socket.IO Issues:** Use local `socket.io.js` for offline/CDN-restricted networks
 - **Encryption Errors:** Check browser console for Web Crypto API support (requires HTTPS/localhost)
+- **Video Call Issues:** Ensure camera/microphone permissions are granted, check WebRTC compatibility
+- **Login Attempts:** If locked out, wait 5 minutes or restart server to reset login attempts
 
 ---
 
