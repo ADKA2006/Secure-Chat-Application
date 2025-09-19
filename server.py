@@ -312,6 +312,22 @@ def handle_join_room(data):
         active_rooms[room_id]['users'].append(user['username'])
     
     print(f"{user['username']} joined room: {room_id}")
+   
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT u.username, m.message, DATE_FORMAT(m.timestamp, '%H:%i') as time FROM messages m JOIN users u ON m.user_id = u.id WHERE m.room_id = %s ORDER BY m.timestamp DESC LIMIT 50", (room_id,))
+            messages = cursor.fetchall()
+            
+            for msg in reversed(messages):
+                username, message, timestamp = msg
+                emit('new_message', {'username': username,'message': message,'timestamp': timestamp })
+        except Error as e:
+            print(f"Error in fetching messages from the database")
+        finally:
+            cursor.close()
+            conn.close()
 
     emit('room_joined', {
         'room_id': room_id,
@@ -338,6 +354,22 @@ def handle_message(data):
     message = data.get('message', '').strip()
     if message == "":
         return
+    
+    # Store message in database
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO messages (room_id, user_id, message) VALUES (%s, %s, %s)",
+                (user['room'], user['user_id'], message)
+            )
+            conn.commit()
+        except Error as e:
+            print(f"Database error storing message: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     
     # Message is already encrypted by client, just forward it
     message_data = {
