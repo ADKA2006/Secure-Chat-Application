@@ -154,6 +154,19 @@ def cleanup_login_attempts():
     for user in expired_users:
         del login_attempts[user]
 
+def cleanup_messages_history():
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages WHERE timestamp < Now() - INTERVAL  30 MINUTE")
+            conn.commit()
+        except Error as e:
+            print(f"Database error: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
 @app.route('/')   #Get only
 def index():
     return render_template('index.html')
@@ -365,6 +378,7 @@ def handle_message(data):
                 (user['room'], user['user_id'], message)
             )
             conn.commit()
+            cleanup_messages_history()
         except Error as e:
             print(f"Database error storing message: {e}")
         finally:
