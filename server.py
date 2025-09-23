@@ -335,7 +335,7 @@ def handle_join_room(data):
             
             for msg in reversed(messages):
                 username, message, timestamp = msg
-                emit('new_message', {'username': username,'message': message,'timestamp': timestamp })
+                emit('message_history', {'username': username,'message': message,'timestamp': timestamp })
         except Error as e:
             print(f"Error in fetching messages from the database")
         finally:
@@ -586,11 +586,18 @@ def handle_webrtc_offer(data):
     target_user = data.get('target_user')
     
     if room_id and room_id in video_calls:
-        emit('webrtc_offer', {
-            'offer': data.get('offer'),
-            'from_user': user['username'],
-            'target_user': target_user   
-        }, room=room_id, include_self=False)  # All the users in the room is getting the offer (sender not getting)
+        target_client_id = None
+        for cid, u in connected_users.items():
+            if u['username'] == target_user and u['room'] == room_id:
+                target_client_id = cid
+                break
+        
+        if target_client_id:
+            emit('webrtc_offer', {
+                'offer': data.get('offer'),
+                'from_user': user['username'],
+                'target_user': target_user   
+            }, room=target_client_id)  # Send only to the specific target user
 
 @socketio.on('webrtc_answer')
 def handle_webrtc_answer(data):
@@ -604,11 +611,18 @@ def handle_webrtc_answer(data):
     target_user = data.get('target_user')
     
     if room_id and room_id in video_calls:
-        emit('webrtc_answer', {
-            'answer': data.get('answer'),
-            'from_user': user['username'],
-            'target_user': target_user
-        }, room=room_id, include_self=False)
+        target_client_id = None
+        for cid, u in connected_users.items():
+            if u['username'] == target_user and u['room'] == room_id:
+                target_client_id = cid
+                break
+        
+        if target_client_id:
+            emit('webrtc_answer', {
+                'answer': data.get('answer'),
+                'from_user': user['username'],
+                'target_user': target_user
+            }, room=target_client_id)  # Send only to the specific target user
 
 @socketio.on('webrtc_ice_candidate')
 def handle_webrtc_ice_candidate(data):
@@ -622,11 +636,18 @@ def handle_webrtc_ice_candidate(data):
     target_user = data.get('target_user')
     
     if room_id and room_id in video_calls:
-        emit('webrtc_ice_candidate', {
-            'candidate': data.get('candidate'),
-            'from_user': user['username'],
-            'target_user': target_user
-        }, room=room_id, include_self=False)
+        target_client_id = None
+        for cid, u in connected_users.items():
+            if u['username'] == target_user and u['room'] == room_id:
+                target_client_id = cid
+                break
+        
+        if target_client_id:
+            emit('webrtc_ice_candidate', {
+                'candidate': data.get('candidate'),
+                'from_user': user['username'],
+                'target_user': target_user
+            }, room=target_client_id) 
 
 if __name__ == '__main__':
     print("Starting Secure Chat Server")

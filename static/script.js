@@ -446,6 +446,7 @@ class SecureChatClient {
         element.className = `status ${type}`;
     }
 
+    // Diagnostic function to check WebRTC state
     showToast(message, type = 'info') {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
@@ -543,18 +544,38 @@ class SecureChatClient {
         };
 
         const peerConnection = new RTCPeerConnection(configuration);
-        if (this.localStream) {   // Add local stream to peer connection
+        
+        // Add local stream tracks to peer connection
+        if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, this.localStream);
             });
         }
+        
+        // Handle incoming remote streams
         peerConnection.ontrack = (event) => {
-            console.log('Received remote stream from:', username);
-            this.remoteStreams.set(username, event.streams[0]);
-            this.addRemoteVideoToGrid(username, event.streams[0]);
+            const remoteStream = event.streams[0];
+            this.remoteStreams.set(username, remoteStream);
+            this.addRemoteVideoToGrid(username, remoteStream);
+            
+            
+            setTimeout(() => {
+               
+                const videoElement = document.querySelector(`#participant-${username} video`);
+                if (videoElement) {
+                    videoElement.muted = false; 
+                    if (videoElement.paused) {
+                        videoElement.play().catch(e => 
+                            console.error(`Error playing video for ${username}:`, e)
+                        );
+                    }
+                }
+            }, 500);
         };
+        
+        // Handle ICE candidates
         peerConnection.onicecandidate = (event) => {
-            if (event.candidate) { // ICE Candidate
+            if (event.candidate) {
                 this.socket.emit('webrtc_ice_candidate', {
                     candidate: event.candidate,
                     target_user: username
@@ -562,8 +583,8 @@ class SecureChatClient {
             }
         };
 
+        // Monitor connection state
         peerConnection.onconnectionstatechange = () => {
-            console.log(`Connection state with ${username}:`, peerConnection.connectionState);
             if (peerConnection.connectionState === 'connected') {
                 this.showVideoStatus(`Connected to ${username}`, 'success');
             } else if (peerConnection.connectionState === 'disconnected' || 
@@ -589,7 +610,76 @@ class SecureChatClient {
         const video = document.createElement('video');
         video.autoplay = true;
         video.playsInline = true;
+        video.muted = false; // Start unmuted for remote videos
+        video.controls = false;
+        
+        // Basic event handlers
+        video.onloadedmetadata = () => {
+            video.play().then(() => {
+                // Success
+            }).catch(e => {
+                // Try muted play if autoplay fails
+                video.muted = true;
+                return video.play();
+            }).then(() => {
+                // Try to unmute after successful play
+                setTimeout(() => {
+                    if (video.muted) {
+                        video.muted = false;
+                    }
+                }, 1000);
+            }).catch(finalError => {
+                console.error(`Video play failed for ${username}:`, finalError);
+            });
+        };
+        
+        video.oncanplay = () => {
+            if (video.paused) {
+                video.play().catch(e => console.error(`Error playing video for ${username}:`, e));
+            }
+        };
+        
+        video.onerror = (e) => {
+            console.error(`Video error for ${username}:`, e);
+        };
+        
+        // Set the stream
         video.srcObject = stream;
+        
+        // Check if video track has actual content
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length > 0) {
+            const videoTrack = videoTracks[0];
+            
+            // Listen for track events
+            videoTrack.onended = () => {
+                console.log(`Video track ended for ${username}`);
+            };
+            
+            videoTrack.onmute = () => {
+                console.log(`Video track muted for ${username}`);
+            };
+            
+            videoTrack.onunmute = () => {
+                // Force video to play when track becomes unmuted
+                setTimeout(() => {
+                    const videoElement = document.querySelector(`#participant-${username} video`);
+                    if (videoElement) {
+                        videoElement.muted = false; // Ensure video element is not muted
+                        videoElement.play().then(() => {
+                            // Success
+                        }).catch(e => {
+                            console.error(`Error playing video after unmute for ${username}:`, e);
+                            // Try with muted playback as fallback
+                            videoElement.muted = true;
+                            videoElement.play().catch(err => 
+                                console.error(`Final play attempt failed for ${username}:`, err)
+                            );
+                        });
+                    }
+                }, 100);
+            };
+        }
 
         const participantInfo = document.createElement('div');
         participantInfo.className = 'participant-info';
@@ -601,6 +691,13 @@ class SecureChatClient {
 
         this.participants.add(username);
         this.updateGridLayout();
+        
+        // Force video to play after a short delay
+        setTimeout(() => {
+            if (video.paused) {
+                video.play().catch(e => console.error(`Error force playing video for ${username}:`, e));
+            }
+        }, 100);
     }
 
     updateGridLayout() {
@@ -625,25 +722,32 @@ class SecureChatClient {
     async handleNewParticipant(username) {
         if (username === this.username) return;
 
-        console.log('Creating peer connection for new participant:', username);
         const peerConnection = await this.createPeerConnection(username);
-        try {
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            
-            this.socket.emit('webrtc_offer', {
-                offer: offer,
-                target_user: username
-            });
-        } catch (error) {
-            console.error('Error creating offer for', username, ':', error);
+        
+        // Use polite/impolite peer pattern to avoid glare
+        const isPolite = this.username < username; // Lexicographically smaller username is polite
+        
+        if (isPolite) {
+            try {
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                await peerConnection.setLocalDescription(offer);
+                
+                this.socket.emit('webrtc_offer', {
+                    offer: offer,
+                    target_user: username
+                });
+            } catch (error) {
+                console.error('Error creating offer for', username, ':', error);
+            }
         }
     }
 
     async handleOffer(offer, fromUser) {
         if (fromUser === this.username) return;
 
-        console.log('Handling offer from:', fromUser);
         let peerConnection = this.peerConnections.get(fromUser);
         
         if (!peerConnection) {
@@ -653,7 +757,10 @@ class SecureChatClient {
         try {
             await peerConnection.setRemoteDescription(offer);
             
-            const answer = await peerConnection.createAnswer();
+            const answer = await peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
             await peerConnection.setLocalDescription(answer);
             
             this.socket.emit('webrtc_answer', {
@@ -668,15 +775,19 @@ class SecureChatClient {
     async handleAnswer(answer, fromUser) {
         if (fromUser === this.username) return;
 
-        console.log('Handling answer from:', fromUser);
         const peerConnection = this.peerConnections.get(fromUser);
         
         if (peerConnection) {
             try {
-                await peerConnection.setRemoteDescription(answer);
+                // Check signaling state before setting remote description
+                if (peerConnection.signalingState === 'have-local-offer') {
+                    await peerConnection.setRemoteDescription(answer);
+                }
             } catch (error) {
                 console.error('Error handling answer from', fromUser, ':', error);
             }
+        } else {
+            console.error('No peer connection found for answer from:', fromUser);
         }
     }
 
@@ -691,6 +802,8 @@ class SecureChatClient {
             } catch (error) {
                 console.error('Error adding ICE candidate from', fromUser, ':', error);
             }
+        } else {
+            console.error('No peer connection found for ICE candidate from:', fromUser);
         }
     }
 
@@ -717,8 +830,8 @@ class SecureChatClient {
         const audioTrack = this.localStream.getAudioTracks()[0];
         if (audioTrack) {
             audioTrack.enabled = !audioTrack.enabled;
-            this.muteBtn.textContent = audioTrack.enabled ? 'Mute' : 'Unmute';
-            this.muteBtn.className = audioTrack.enabled ? 'btn secondary' : 'btn secondary muted';
+            this.muteToggleBtn.textContent = audioTrack.enabled ? 'Mute' : 'Unmute';
+            this.muteToggleBtn.className = audioTrack.enabled ? 'btn secondary' : 'btn secondary muted';
             
             const localContainer = document.getElementById(`participant-${this.username}`);
             if (localContainer) {
@@ -767,9 +880,9 @@ class SecureChatClient {
         this.participants.clear();
         this.videoGrid.innerHTML = '';
         this.isInCall = false;
-        this.muteBtn.textContent = '🎤 Mute';
-        this.muteBtn.className = 'btn secondary';
-        this.videoToggleBtn.textContent = '📹 Video';
+        this.muteToggleBtn.textContent = 'Mute';
+        this.muteToggleBtn.className = 'btn secondary';
+        this.videoToggleBtn.textContent = 'Video';
         this.videoToggleBtn.className = 'btn secondary';
         this.hideVideoModal();
     }
@@ -851,7 +964,10 @@ class SecureChatClient {
             this.fileInput.disabled = false;
             this.videoCallBtn.disabled = false;
             
-            this.clearMessages();
+            // Only clear messages if switching rooms, not when first joining
+            if (this.currentRoom && this.currentRoom !== data.room_id) {
+                this.clearMessages();
+            }
             this.addSystemMessage(`Joined room: ${data.room_id}`);
         });
 
@@ -875,6 +991,11 @@ class SecureChatClient {
         });
         
         this.socket.on('new_message', async (data) => {
+            const decryptedMessage = await this.Decrypt(data.message);
+            this.addMessage(data.username, decryptedMessage, data.timestamp);
+        });
+
+        this.socket.on('message_history', async (data) => {
             const decryptedMessage = await this.Decrypt(data.message);
             this.addMessage(data.username, decryptedMessage, data.timestamp);
         });
